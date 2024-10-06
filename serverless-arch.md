@@ -1,66 +1,56 @@
+# Migrating to Serverless Infrastructure: Architecture Overview, Challenges, and Implementation Strategy
 
 ## Introduction
 
 This document outlines:
 
-- The current architecture of the MOTU game server
+- The current architecture of the game server
 - The challenges and limitations of the current setup
 - A strategy to migrate the architecture to serverless infrastructure
 
+---
+
 ## Current Architecture
 
-```
-+-----------+  UDP  +--------------------------------------------+  UDP  +-----------+
-| Player A  | <---> |           Game Server Process (Linux)      | <---> | Player B  |
-|           |       |                                            |       |           |
-|           |       |  +--------------------------------------+  |       |           |
-+-----------+       |  |     Shared Memory (Multiple Sessions)  |  |       +-----------+
-                    |  |                                        |  |
-                    |  |  - Game Session 1 (Player A vs. B)     |  |
-                    |  |  - Game Session 2 (Player C vs. D)     |  |
-                    |  |  - Game Session 3 (Player E vs. F)     |  |
-                    |  +--------------------------------------+  |
-                    +--------------------------------------------+
-```
+![./assets/current-arch.drawio.svg](./assets/current-arch.drawio.svg)
 
-- Linux process written in Unity, x86_64 architecture
+- Linux process written in Unity; architecture is x86_64
 - Communicates with clients via UDP (Unity Netcode)
-- Hosts multiple game sessions on a single process
+- Hosts multiple game sessions on a single, long-lived process
   - Each game session is a match between two players
-  - Game session state resides in an in-memory data structure on the game server process
+  - Game session state resides in an in-memory data structure on the game server process. That means two players in the
+    same match *must* connect to the same game server process.
+
 - It is estimated that a single game server process could host upwards of 40 game sessions on a single vCPU core when
   running this way
 
 - Resource utilization at rest (i.e., while hosting no game sessions)
-  - CPU: 8% of a single vCPU core (reference Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz)
+  - CPU: 8% of a single CPU core (Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz)
   - Memory: 267 MB resident
 
-Since game sessions reside in-memory, two players of the same match *must* connect to the same game server process.
+---
 
-## Challenges and Limitations of the Current Architecture
+## Problem Space
 
 ### Process Execution Model of Major Hosting Services
 
-Major hosting services, like GameLift and PlayFab, have a process execution model that dedicates a single server process to a single game session. That is to say, the services spin up a dedicated game server process having a lifecycle is tied to the game session. On a box with 2 GB RAM, we'd be able to fit, 6 to 7 concurrent game sessions (or 12 to 14 players), given the server's memory footprint. This is not an efficient use of resources, and we would be paying more than we should per game session.
+Major hosting services, like [GameLift](https://aws.amazon.com/gamelift/) and [PlayFab](https://playfab.com/), have a process execution model that dedicates a single server process to a single game session. That is to say, a dedicated game server process is allocated exclusively for
+a single game session, and when the game ends, the process goes away. According to this model, we'd be able to fit on a box with 2 GB RAM about 6 to 7 concurrent game sessions (or 12 to 14 players), given the server's memory footprint. This is not an efficient use of resources, and we would be paying more than we should per game session.
 
-## Strategy for Migrating to Serverless Infrastructure
+---
 
-
-
-### How would hosting on ECS Fargate look like?
+## Serverless Hosting on ECS Fargate
 
 ![Serverless Architecture Diagram](./assets/serverless-arch.drawio.svg)
 
-- Each game server process runs in an ECS Fargate container.
-- As the number of players connected to the game increases, so too do the number of containers, due to autoscaling
-policies that add or remove containers based on the number of connected players.
-- We can also vertically scale the containers by increasing the number of vCPUs and memory allocated to each container. This would allow us to host more game sessions on a single container.
-- Game clients connect via TCP to an network load balancer (OSI Layer 4) that forwards connections to a container that is not under heavy load. The client and server maintain a *persistent connection throughout the life of the game session*.
-- Game session state, instead of living in the game server process, resides in Redis and can be accessed by any game server process
-- Game server processes subscribe to and publish updates to match-specific Redis pubsub channels to communicate with each other
-- The game server exposes an HTTP health check endpoint so that the load balancer is able to route connections to a container that is not under heavy load
-- Whenever a player takes an action, the game server process updates the game state in Redis, and publishes the update to a Redis pubsub channel, notifying all subscribers
-
+- Each game server process runs in an [ECS Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html) container.
+- Autoscaling policies scale out the number of containers with increasing resource utilization and number of connected players.
+- We can also vertically scale the containers by increasing the number of vCPUs and memory allocated to each container, allowing more players to connect to a single process.
+- Game clients connect to the game via TCP through a network load balancer. The load balancer then directs the connection to an ECS container. Once connected, the client and server keep the TCP connection open for the entirety of the game session.
+- Game state (the state of a single match) no longer resides in-process. Instead, it resides in Redis and can be accessed by any game server process.
+- Game server processes subscribe to and publish updates to match-specific Redis pubsub channels to communicate with each other.
+- Whenever a player takes an action, the game server process updates the game state in Redis and publishes the update to a Redis pubsub channel, notifying all subscribers.
+- The game server exposes an HTTP health check endpoint so that the load balancer can avoid overloading a single container with too many client connections.
 
 ### Game Session Activity Sequence
 ```mermaid
@@ -100,8 +90,8 @@ loop Until game ends
   GameServerB ->> Redis: Update game state
   Redis ->> GameServerB: ACK
   GameServerB ->> Redis: Publish update to pubsub channel
-  Redis ->> GameServerA: Notify update
-  Redis ->> GameServerB: Notify update
+  Redis -->> GameServerA: Notify update
+  Redis -->> GameServerB: Notify update
   GameServerB ->> ClientB: Did update game state
   GameServerA ->> ClientA: Did update game state
 end
@@ -117,46 +107,67 @@ GameServerB ->> ClientB: Game did end
 ClientB ->> GameServerB: Disconnect
 ```
 
-### Architectural Changes Required to Migrate to Serverless Infrastructure
+### Implementation Requirements
 
-1. Replace UDP-based Unity Netcode with a TCP-based persistent connection
-1. Move game state out of the game server process and into Redis
-1. Game server processes dispatch events to Redis pubsub channels to communicate with each other
-1. Game server process must implement an HTTP health check endpoint so that the load balancer can route connections to 
-  a container that is not under heavy load
+**Replace UDP-based Unity Netcode with a TCP-based persistent connection.** UDP, being a connectionless protocol, will 
+not work for us because we need a game client to stay connected to a single game server process for the duration of
+the game session. If we stick with UDP, every player action will result in a UDP packet being sent to any available
+container. This is not compatible with the proposed Redis pubsub-based inter-process communication model.
 
-## Cost Analysis
+Possible solutions:
 
-### ECS Fargate
+- [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) transport
+
+**Move game state out of the game server process and into Redis.** As long as the game state resides in the game server
+process, we will have to send both participants of a match to the same process. This is not compatible with load balancing.
+
+**Use Redis Pub/Sub for inter-server communication.** When a player takes an action, the connected game server process
+needs to publish a notification to a Redis pubsub channel. This way, the other player's game server process is notified
+of the action, enabling timely UI updates to the opposing player.
+
+**Allow the load balancer to interrogate a game server's health.** The game server must expose an HTTP interface
+for a load balancer to check the health of the process. This way, the load balancer can route new
+connections to containers that aren't already under too much load.
+
+---
+
+## Cost Estimates
+
+### ECS Fargate + Redis
 
 **Assumptions**
 
 - Fargate compute cost is `$0.04048` per vCPU per hour, in `us-west-2`
+  [source](https://aws.amazon.com/fargate/pricing/)
 - vCPU Requirements:
   - We are confident we can host at least 40 game sessions on a single vCPU core. But for the sake of this exercise,
     let's assume we can only host 20 game sessions per vCPU.
-  - Since 1 vCPU core can host 20 game sessions, to run 1,000 game sessions, we need 1,000 sessions / 20 sessions per vCPU = 50 vCPUs
+  - Since 1 vCPU core hosts 20 concurrent game sessions, to run 1,000 concurrent game sessions, we need
+    1,000 sessions / 20 sessions per vCPU = 50 vCPUs
+- Each game session takes up 1 MB of storage after serialization
 
 **Cost Calculation**:
-- vCPU Hourly Cost
-  - 50 vCPUs * $0.04048 per vCPU per hour = $2.024 per hour
-- Daily Compute Cost
-  - $2.024 per hour * 24 hours = $48.576 per day
-- Monthly Compute Cost (30 days)
-  - $48.576 per day * 30 = $1,457.28
-
-- Monthly Network Egress Cost is calculated using Amazon's [standard rates](https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer)
+- Fargate
+  - 50 vCPUs * $0.04048 per vCPU per hour = $2.024 per hour f
+  - $2.024 per hour * 24 hours = $48.576 per day for 
+  - $48.576 per day * 30 days = $1,457.28
+- Single node Redis Cluster with one replica for high availability, `cache.m6g.xlarge` , 67% utilization
+  - 1,000 concurrent game sessions * 1 MB per session = 1,000 MB of storage
+  - A single ElastiCache for Redis node of type `cache.m6g.xlarge` has over 12 GB of memory -- more than plenty. Let's
+    say we go with one node, plus a replica for high availability
+  - Monthly cost of this setup is: $290.53
+- Total Monthly Cost: $1,747.81
 
 ### PlayFab
 
-See screenshot below:
+See screenshot taken from the [PlayFab MPS pricing estimator](https://playfab.com/mps-calculator/)
 
 ![PlayFab Pricing](./assets/playfab-pricing.png)
 
 **Cost Calculation**:
 
 ### Players
-- **Maximum and average concurrent players**: 2,000
+- Maximum and average concurrent players: 2,000
 
 ### Game Server Configuration
 
@@ -181,13 +192,7 @@ See screenshot below:
 ### Usage Estimator
 - **Core hours (daily)**: 4,416
 - **Core hours (monthly)**: 132,480
-- **Network egress (daily)**: 2,109 Mbps
-- **Network egress (monthly)**: 63,281 Mbps
 
 ### Costs Estimator
 - **Compute costs (daily)**: $221.46
 - **Compute costs (monthly)**: $6,643.87
-- **Network costs (daily)**: $105.47
-- **Network costs (monthly)**: $3,164.06
-
-The estimated monthly cost for this setup would be **$6,643.87**, only for compute costs.
