@@ -112,7 +112,7 @@ ClientB ->> GameServerB: Disconnect
 **Replace UDP-based Unity Netcode with a TCP-based persistent connection.** UDP, being a connectionless protocol, will 
 not work for us because we need a game client to stay connected to a single game server process for the duration of
 the game session. If we stick with UDP, every player action will result in a UDP packet being sent to any available
-container. This is not compatible with the proposed Redis pubsub-based inter-process communication model.
+container. This is not compatible with Redis pubsub-based inter-process communication.
 
 Possible solutions:
 
