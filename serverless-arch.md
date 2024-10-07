@@ -150,7 +150,7 @@ connections to containers that aren't already under too much load.
 - Fargate
   - 50 vCPUs * $0.04048 per vCPU per hour = $2.024 per hour
   - $2.024 per hour * 24 hours = $48.576 per day
-  - $48.576 per day * 30 days = $1,457.28
+  - $48.576 per day * 30 days = $1,457.28 per month
 - Single node Redis Cluster with one replica for high availability, `cache.m6g.xlarge` , 67% utilization
   - 1,000 concurrent game sessions * 1 MB per session = 1,000 MB of storage
   - A single ElastiCache for Redis node of type `cache.m6g.xlarge` has over 12 GB of memory -- more than plenty. Let's
