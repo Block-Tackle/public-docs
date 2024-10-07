@@ -46,7 +46,7 @@ a single game session, and when the game ends, the process goes away. According 
 - Each game server process runs in an [ECS Fargate](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AWS_Fargate.html) container.
 - Autoscaling policies scale out the number of containers with increasing resource utilization and number of connected players.
 - We can also vertically scale the containers by increasing the number of vCPUs and memory allocated to each container, allowing more players to connect to a single process.
-- Game clients connect to the game via TCP through a network load balancer. The load balancer then directs the connection to an ECS container. Once connected, the client and server keep the TCP connection open for the entirety of the game session.
+- Game clients connect to the game via TCP through an OSI Layer 4 network load balancer. The load balancer then directs the connection to an ECS container. Once connected, the client and server keep the TCP connection open for the entirety of the game session.
 - Game state (the state of a single match) no longer resides in-process. Instead, it resides in Redis and can be accessed by any game server process.
 - Game server processes subscribe to and publish updates to match-specific Redis pubsub channels to communicate with each other.
 - Whenever a player takes an action, the game server process updates the game state in Redis and publishes the update to a Redis pubsub channel, notifying all subscribers.
