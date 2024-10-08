@@ -21,13 +21,14 @@ This document outlines:
   - Game session state resides in an in-memory data structure on the game server process. That means two players in the
     same match *must* connect to the same game server process.
 
-- It is estimated that a single game server process could host upwards of 40 game sessions on a single vCPU core when
-  running this way
-
 - Resource utilization at rest (i.e., while hosting no game sessions)
   - CPU: 8% of a single CPU core (Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz)
   - Memory: 267 MB resident
 
+- It is estimated that a single game server process could host upwards of 40 game sessions on a single vCPU core when
+  running this way
+
+- It takes about 15 seonds for the process to enter a state of readiness to accept connections.
 ---
 
 ## Problem Space
