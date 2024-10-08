@@ -110,15 +110,6 @@ ClientB ->> GameServerB: Disconnect
 
 ### Implementation Requirements
 
-**Replace UDP-based Unity Netcode with a TCP-based persistent connection.** UDP, being a connectionless protocol, will 
-not work for us because we need a game client to stay connected to a single game server process for the duration of
-the game session. If we stick with UDP, every player action will result in a UDP packet being sent to any available
-container. This is not compatible with Redis pubsub-based inter-process communication.
-
-Possible solutions:
-
-- [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) transport
-
 **Move game state out of the game server process and into Redis.** As long as the game state resides in the game server
 process, we will have to send both participants of a match to the same process. This is not compatible with load balancing.
 
@@ -129,6 +120,14 @@ of the action, enabling timely UI updates to the opposing player.
 **Allow the load balancer to interrogate a game server's health.** The game server must expose an HTTP interface
 for a load balancer to check the health of the process. This way, the load balancer can route new
 connections to containers that aren't already under too much load.
+
+**Replace UDP-based Unity Netcode with a TCP-based persistent connection.** UDP, being a connectionless protocol, will 
+not work for us because we need a game client to stay connected to a single game server process for the duration of
+the game session. Our use of Redis Pub/Sub as described above would not work otherwise.
+
+Possible solutions:
+
+- [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) transport
 
 ---
 
