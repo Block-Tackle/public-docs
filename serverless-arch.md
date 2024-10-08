@@ -28,7 +28,7 @@ This document outlines:
 - It is estimated that a single game server process could host upwards of 40 game sessions on a single vCPU core when
   running this way
 
-- It takes about 15 seonds for the process to enter a state of readiness to accept connections.
+- It takes about 15 seconds for the process to enter a state of readiness to accept connections.
 ---
 
 ## Problem Space
