@@ -123,7 +123,7 @@ connections to containers that aren't already under too much load.
 
 ### Unknowns
 
-**Will UDP-based Unity Netcode work for us? Or do we have to switch to a persistent TCP socket?** [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) for example.
+- Will UDP-based Unity Netcode work for us? Or do we have to switch to a persistent TCP socket? [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) for example.
 
 ---
 
