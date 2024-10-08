@@ -121,13 +121,9 @@ of the action, enabling timely UI updates to the opposing player.
 for a load balancer to check the health of the process. This way, the load balancer can route new
 connections to containers that aren't already under too much load.
 
-**Replace UDP-based Unity Netcode with a TCP-based persistent connection.** UDP, being a connectionless protocol, will 
-not work for us because we need a game client to stay connected to a single game server process for the duration of
-the game session. Our use of Redis Pub/Sub as described above would not work otherwise.
+### Unknowns
 
-Possible solutions:
-
-- [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) transport
+**Will UDP-based Unity Netcode work for us? Or do we have to switch to a persistent TCP socket?** [Mirror](https://mirror-networking.gitbook.io/docs) with [Telepathy](https://mirror-networking.gitbook.io/docs/manual/transports/telepathy-transport) for example.
 
 ---
 
