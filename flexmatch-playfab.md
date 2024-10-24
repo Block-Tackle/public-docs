@@ -58,10 +58,6 @@ deactivate Client
 
 ## Potential Bottlenecks
 
-### FlexMatch
-
-- Lambda cold start times
-
-### PlayFab MPS
-
-- Insufficient capacity (i.e., not enough standby servers)
+- Concurrent FlexMatch worker Lambda invocations
+- Insufficient game server capacity (i.e., not enough PlayFab servers on standby)
+- XMPP server capacity
