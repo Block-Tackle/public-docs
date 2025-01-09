@@ -25,7 +25,7 @@ This document outlines:
   - CPU: 8% of a single CPU core (Intel(R) Xeon(R) Platinum 8259CL CPU @ 2.50GHz)
   - Memory: 267 MB resident
 
-- It is estimated that a single game server process could host upwards of 40 game sessions on a single vCPU core when
+- It is estimated that a single game server process could host upwards of 80 game sessions on a single vCPU core when
   running this way
 
 - It takes about 15 seconds for the process to enter a state of readiness to accept connections.
